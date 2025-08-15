@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import importlib
 from fastapi.routing import APIRoute
 
 
@@ -31,21 +32,32 @@ def main():
     parser.add_argument(
         "--app",
         type=str,
-        help="Path to FastAPI application instance",
+        help="Path to FastAPI application instance; can be a .py file or module:attribute",
         default="app.py",
         required=True,
     )
     args = parser.parse_args()
 
     app_path = args.app
-    app_dir, app_file = os.path.split(app_path)
-    sys.path.append(app_dir)
-    app_name, _ = os.path.splitext(app_file)
-    app_module = __import__(app_name)
-    app = getattr(app_module, "app")
+
+    if os.path.isfile(app_path) and app_path.endswith(".py"):
+        app_dir, app_file = os.path.split(app_path)
+        sys.path.append(app_dir or ".")
+        app_name, _ = os.path.splitext(app_file)
+        module = __import__(app_name)
+        app = getattr(module, "app")
+
+    elif ":" in app_path:
+        module_name, attr = app_path.split(":", 1)
+        module = importlib.import_module(module_name)
+        app = getattr(module, attr)
+    else:
+        parser.error(
+            "--app must be a Python file (.py) or module:attribute format"
+        )
+        return
 
     routes = register_routes(app)
-
     collection = {
         "info": {
             "name": args.name,
